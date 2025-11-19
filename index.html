@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Simple Voice Transcriber</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body {
+      margin: 0;
+      padding: 24px;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #0f172a;
+      color: #e5e7eb;
+    }
+
+    h1 {
+      margin-top: 0;
+      margin-bottom: 8px;
+      font-size: 1.5rem;
+    }
+
+    p {
+      margin-top: 0;
+      margin-bottom: 16px;
+      font-size: 0.95rem;
+      color: #94a3b8;
+    }
+
+    .buttons {
+      margin-bottom: 16px;
+    }
+
+    button {
+      padding: 8px 16px;
+      margin-right: 8px;
+      border-radius: 6px;
+      border: none;
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    #start-btn {
+      background: #22c55e;
+      color: #052e16;
+    }
+
+    #stop-btn {
+      background: #ef4444;
+      color: #fef2f2;
+    }
+
+    #status {
+      font-size: 0.9rem;
+      margin-bottom: 12px;
+      color: #facc15;
+    }
+
+    #transcript {
+      width: 100%;
+      min-height: 160px;
+      padding: 10px;
+      border-radius: 8px;
+      border: 1px solid #1e293b;
+      background: #020617;
+      color: #e5e7eb;
+      font-size: 0.95rem;
+      line-height: 1.5;
+      white-space: pre-wrap;
+    }
+
+    .note {
+      margin-top: 12px;
+      font-size: 0.8rem;
+      color: #64748b;
+    }
+  </style>
+</head>
+<body>
+  <h1>Simple Voice Transcriber</h1>
+  <p>Click Start, allow microphone access, and speak. Click Stop to stop recording.</p>
+
+  <div class="buttons">
+    <button id="start-btn">Start</button>
+    <button id="stop-btn">Stop</button>
+  </div>
+
+  <div id="status">Status: idle</div>
+
+  <div id="transcript">Transcript will appear here...</div>
+
+  <p class="note">
+    This uses the Web Speech API. Chrome on desktop works best. Audio is processed by the browser vendor, not GitHub.
+  </p>
+
+  <script>
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+    const startBtn = document.getElementById("start-btn");
+    const stopBtn = document.getElementById("stop-btn");
+    const statusEl = document.getElementById("status");
+    const transcriptEl = document.getElementById("transcript");
+
+    if (!SpeechRecognition) {
+      statusEl.textContent = "Your browser does not support speech recognition. Try Chrome on desktop.";
+      startBtn.disabled = true;
+      stopBtn.disabled = true;
+    } else {
+      const recognition = new SpeechRecognition();
+      recognition.continuous = true;      // keep listening until stop() is called
+      recognition.interimResults = true;  // show partial results
+      recognition.lang = "en-US";
+
+      let finalTranscript = "";
+      let listening = false;
+
+      function setStatus(message) {
+        statusEl.textContent = "Status: " + message;
+      }
+
+      startBtn.addEventListener("click", () => {
+        if (listening) return;
+        try {
+          // Keep previous transcript if you restart
+          finalTranscript = transcriptEl.textContent === "Transcript will appear here..."
+            ? ""
+            : transcriptEl.textContent + " ";
+          recognition.start();
+        } catch (err) {
+          console.error("Error starting recognition:", err);
+        }
+      });
+
+      stopBtn.addEventListener("click", () => {
+        if (!listening) return;
+        recognition.stop();
+      });
+
+      recognition.addEventListener("start", () => {
+        listening = true;
+        setStatus("listening, speak now");
+      });
+
+      recognition.addEventListener("end", () => {
+        listening = false;
+        setStatus("stopped");
+      });
+
+      recognition.addEventListener("result", (event) => {
+        let interimTranscript = "";
+
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const result = event.results[i];
+          const text = result[0].transcript;
+          if (result.isFinal) {
+            finalTranscript += text.trim() + " ";
+          } else {
+            interimTranscript += text;
+          }
+        }
+
+        const fullText = (finalTranscript + interimTranscript).trim();
+        transcriptEl.textContent = fullText || "Transcript will appear here...";
+      });
+
+      recognition.addEventListener("error", (event) => {
+        console.error("Speech recognition error:", event.error);
+        setStatus("error: " + event.error);
+        listening = false;
+      });
+    }
+  </script>
+</body>
+</html>
