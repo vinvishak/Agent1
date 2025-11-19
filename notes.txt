@@ -1,0 +1,5 @@
+[2025-11-18 21:57:22] This is testing first time Python agent to take notes. And yeah, that's it.
+[2025-11-18 21:57:54] Take two, seeing if it is transcribing live, waiting on transcribing still hasn't.
+[2025-11-18 21:58:05] but looks like it is transcribing now. I am talking random things at the moment. I want you to...
+[2025-11-18 22:30:31] Hello, this is testing again for the white snort ticker. There was some
+[2025-11-18 22:30:42] Make with the pip package management system. I have done that I think.
