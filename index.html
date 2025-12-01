@@ -78,7 +78,7 @@
 </head>
 <body>
   <h1>Simple Voice Transcriber</h1>
-  <p>Click Start, allow microphone access, and speak. Click Stop to stop recording.</p>
+  <p>Click Start, allow microphone access, speak, then click Stop. The audio is sent to your backend for transcription.</p>
 
   <div class="buttons">
     <button id="start-btn">Start</button>
@@ -90,85 +90,107 @@
   <div id="transcript">Transcript will appear here...</div>
 
   <p class="note">
-    This uses the Web Speech API. Chrome on desktop works best. Audio is processed by the browser vendor, not GitHub.
+    This records audio in your browser and sends it to your FastAPI + Whisper backend on <code>http://127.0.0.1:8000</code>.
   </p>
 
   <script>
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    // URL of your backend API
+    // Make sure your FastAPI server is running here:
+    // uvicorn main:app --reload --host 127.0.0.1 --port 8000
+    const API_BASE = "http://127.0.0.1:8000";
 
+    // Get references to DOM elements
     const startBtn = document.getElementById("start-btn");
     const stopBtn = document.getElementById("stop-btn");
     const statusEl = document.getElementById("status");
     const transcriptEl = document.getElementById("transcript");
 
-    if (!SpeechRecognition) {
-      statusEl.textContent = "Your browser does not support speech recognition. Try Chrome on desktop.";
-      startBtn.disabled = true;
-      stopBtn.disabled = true;
-    } else {
-      const recognition = new SpeechRecognition();
-      recognition.continuous = true;      // keep listening until stop() is called
-      recognition.interimResults = true;  // show partial results
-      recognition.lang = "en-US";
+    // These will be used for recording
+    let mediaRecorder = null;  // MediaRecorder instance
+    let chunks = [];           // Array of recorded audio data chunks
 
-      let finalTranscript = "";
-      let listening = false;
+    function setStatus(message) {
+      statusEl.textContent = "Status: " + message;
+    }
 
-      function setStatus(message) {
-        statusEl.textContent = "Status: " + message;
+    // Start recording when Start is clicked
+    startBtn.onclick = async () => {
+      // If already recording, do nothing
+      if (mediaRecorder && mediaRecorder.state === "recording") {
+        return;
       }
 
-      startBtn.addEventListener("click", () => {
-        if (listening) return;
-        try {
-          // Keep previous transcript if you restart
-          finalTranscript = transcriptEl.textContent === "Transcript will appear here..."
-            ? ""
-            : transcriptEl.textContent + " ";
-          recognition.start();
-        } catch (err) {
-          console.error("Error starting recognition:", err);
-        }
-      });
+      try {
+        // Ask the user for microphone permission and get an audio stream
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
 
-      stopBtn.addEventListener("click", () => {
-        if (!listening) return;
-        recognition.stop();
-      });
+        // Create a MediaRecorder for this stream
+        mediaRecorder = new MediaRecorder(stream);
+        chunks = [];  // reset chunks
 
-      recognition.addEventListener("start", () => {
-        listening = true;
-        setStatus("listening, speak now");
-      });
-
-      recognition.addEventListener("end", () => {
-        listening = false;
-        setStatus("stopped");
-      });
-
-      recognition.addEventListener("result", (event) => {
-        let interimTranscript = "";
-
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-          const result = event.results[i];
-          const text = result[0].transcript;
-          if (result.isFinal) {
-            finalTranscript += text.trim() + " ";
-          } else {
-            interimTranscript += text;
+        // Each time there is audio data available, store it in the chunks array
+        mediaRecorder.ondataavailable = event => {
+          if (event.data.size > 0) {
+            chunks.push(event.data);
           }
-        }
+        };
 
-        const fullText = (finalTranscript + interimTranscript).trim();
-        transcriptEl.textContent = fullText || "Transcript will appear here...";
-      });
+        // When recording stops, build the audio Blob and send it to the backend
+        mediaRecorder.onstop = async () => {
+          // Combine all recorded chunks into one Blob
+          const blob = new Blob(chunks, { type: "audio/webm" });
 
-      recognition.addEventListener("error", (event) => {
-        console.error("Speech recognition error:", event.error);
-        setStatus("error: " + event.error);
-        listening = false;
-      });
-    }
+          // Prepare form data to send to the backend
+          const formData = new FormData();
+          formData.append("audio", blob, "recording.webm");
+          // For now, use a fixed speaker label
+          formData.append("speaker", "Speaker 1");
+
+          setStatus("Uploading and transcribing...");
+
+          try {
+            // Send POST request to /upload endpoint on the backend
+            const res = await fetch(API_BASE + "/upload", {
+              method: "POST",
+              body: formData,
+            });
+
+            if (!res.ok) {
+              throw new Error("Upload failed with status " + res.status);
+            }
+
+            // Parse the JSON response: { id, speaker, transcript, created_at }
+            const data = await res.json();
+
+            // Show transcript in the transcript div
+            transcriptEl.textContent = data.transcript || "No transcript returned.";
+
+            // Update status
+            const time = new Date(data.created_at).toLocaleString();
+            setStatus("Transcription complete at " + time);
+          } catch (err) {
+            console.error("Error uploading or transcribing:", err);
+            setStatus("Error uploading or transcribing");
+          }
+        };
+
+        // Start recording
+        mediaRecorder.start();
+        setStatus("Recording... speak now");
+        transcriptEl.textContent = "Recording... transcript will appear here after you stop.";
+      } catch (err) {
+        console.error("Error starting recording:", err);
+        setStatus("Error accessing microphone");
+      }
+    };
+
+    // Stop recording when Stop is clicked
+    stopBtn.onclick = () => {
+      if (mediaRecorder && mediaRecorder.state === "recording") {
+        mediaRecorder.stop();
+        setStatus("Stopping and processing...");
+      }
+    };
   </script>
 </body>
 </html>
